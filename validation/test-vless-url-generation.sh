@@ -99,5 +99,8 @@ grep -q 'type=xhttp&path=%2Fxhttp-test&host=www.ozon.ru&mode=auto#sample-xhttp-l
 grep -q 'encryption=mlkem768x25519plus.native.test-encryption' <<< "$urls" || fail "PQ XHTTP encryption missing"
 grep -q 'type=xhttp&path=%2Fxhttp-pq&host=www.ozon.ru&mode=auto#sample-xhttp-pq' <<< "$urls" || fail "PQ XHTTP URL must include mode=auto"
 grep -q 'type=grpc&serviceName=svc-test&mode=gun#sample-grpc' <<< "$urls" || fail "gRPC URL must include mode=gun"
+grep -q 'fp=firefox' <<< "$urls" || fail "subscription URLs must force Firefox fingerprint"
+! grep -q 'fp=chrome' <<< "$urls" || fail "subscription URLs must not expose Chrome fingerprint"
+[[ "$(grep -c '^vless://' <<< "$urls")" == "$(grep -c 'fp=firefox' <<< "$urls")" ]] || fail "every subscription URL must use Firefox fingerprint"
 
 echo "✓ VLESS URL generation checks passed"

@@ -289,15 +289,16 @@ _generate_vless_url_pure() {
   if [[ -n "$route_index" ]]; then
     transport=$(jq -r --argjson i "$route_index" '.routes[$i].transport // empty' "$profile_file") || return 1
     port=$(jq -r --argjson i "$route_index" '.routes[$i].port // empty' "$profile_file") || return 1
-    fingerprint=$(jq -r --argjson i "$route_index" '.routes[$i].fingerprint // .fingerprint // "chrome"' "$profile_file")
+    fingerprint=$(jq -r --argjson i "$route_index" '.routes[$i].fingerprint // .fingerprint // "firefox"' "$profile_file")
     sni=$(jq -r --argjson i "$route_index" '.routes[$i].sni // .sni // "www.ozon.ru"' "$profile_file")
     route_label=$(jq -r --argjson i "$route_index" '.routes[$i].label // .routes[$i].transport // empty' "$profile_file")
   else
     transport=$(jq -r '.transport' "$profile_file") || return 1
     port=$(jq -r '.port' "$profile_file") || return 1
-    fingerprint=$(jq -r '.fingerprint // "chrome"' "$profile_file")
+    fingerprint=$(jq -r '.fingerprint // "firefox"' "$profile_file")
     sni=$(jq -r '.sni // "www.ozon.ru"' "$profile_file")
   fi
+  fingerprint="firefox"
   [[ -n "$route_label" && "$route_label" != "null" ]] && profile_name="${profile_name}-${route_label}"
 
   local server_ip clean_public_key
@@ -963,7 +964,7 @@ select_route_for_profile() {
   echo -e "${YELLOW}Профиль содержит несколько маршрутов. Выберите маршрут для ${action_label}:${NC}\n"
   jq -r '
     to_entries[] |
-    "  \(.key + 1)) \(.value.label // .value.transport): \(.value.transport) :\(.value.port) sni=\(.value.sni // "n/a") fp=\(.value.fingerprint // "chrome")"
+    "  \(.key + 1)) \(.value.label // .value.transport): \(.value.transport) :\(.value.port) sni=\(.value.sni // "n/a") fp=\(.value.fingerprint // "firefox")"
   ' < <(jq '.routes // []' "$profile_file")
   echo -e "  ${CYAN}0)${NC} Назад"
   echo ""
@@ -2160,7 +2161,7 @@ _cascade_build_outbound_json() {
   port=$(jq -r '.port' "$upstream_file")
   uuid=$(jq -r '.uuid' "$upstream_file")
   sni=$(jq -r '.sni' "$upstream_file")
-  fingerprint=$(jq -r '.fingerprint // "chrome"' "$upstream_file")
+  fingerprint=$(jq -r '.fingerprint // "firefox"' "$upstream_file")
   public_key=$(jq -r '.public_key' "$upstream_file")
   short_id=$(jq -r '.short_id' "$upstream_file")
   flow=$(jq -r '.flow // "xtls-rprx-vision"' "$upstream_file")
@@ -2224,7 +2225,7 @@ _cascade_build_fragment_outbound_json() {
 }
 
 _cascade_validate_upstream_fields() {
-  local address=$1 port=$2 uuid=$3 public_key=$4 short_id=$5 sni=$6 fingerprint=${7:-chrome} packet_encoding=${8:-}
+  local address=$1 port=$2 uuid=$3 public_key=$4 short_id=$5 sni=$6 fingerprint=${7:-firefox} packet_encoding=${8:-}
   if [[ -z "$address" || "$address" =~ ^(localhost$|0\.0\.0\.0$|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[0-1])\.) ]]; then
     echo -e "${RED}✗ Upstream address не должен быть локальным/private${NC}"
     return 1
@@ -2281,9 +2282,9 @@ configure_cascade_upstream() {
   read -r short_id
   echo -n -e "${YELLOW}SNI зарубежной ноды: ${NC}"
   read -r sni
-  echo -n -e "${YELLOW}Fingerprint [chrome]: ${NC}"
+  echo -n -e "${YELLOW}Fingerprint [firefox]: ${NC}"
   read -r fingerprint
-  fingerprint=${fingerprint:-chrome}
+  fingerprint=${fingerprint:-firefox}
   echo -n -e "${YELLOW}packetEncoding [пусто для обычного tcp]: ${NC}"
   read -r packet_encoding
 
@@ -2479,9 +2480,9 @@ setup_outbound_server_menu() {
     return 1
   fi
 
-  echo -n -e "${YELLOW}Fingerprint [chrome]: ${NC}"
+  echo -n -e "${YELLOW}Fingerprint [firefox]: ${NC}"
   read -r fingerprint
-  fingerprint=${fingerprint:-chrome}
+  fingerprint=${fingerprint:-firefox}
   if [[ ! "$fingerprint" =~ ^(chrome|firefox|safari|ios|android|edge|qq|random|randomized)$ ]]; then
     echo -e "${RED}✗ Некорректный fingerprint${NC}"
     sleep 2
@@ -2517,7 +2518,7 @@ setup_outbound_server_menu() {
   local actual_sni actual_short_id actual_fp public_key address
   actual_sni=$(jq -r --argjson p "$port" '.inbounds[]? | select(.port == $p) | .streamSettings.realitySettings.serverNames[0] // empty' "$CONFIG_FILE" 2>/dev/null)
   actual_short_id=$(jq -r --argjson p "$port" '.inbounds[]? | select(.port == $p) | .streamSettings.realitySettings.shortIds[0] // empty' "$CONFIG_FILE" 2>/dev/null)
-  actual_fp=$(jq -r --argjson p "$port" '.inbounds[]? | select(.port == $p) | .streamSettings.realitySettings.fingerprint // "chrome"' "$CONFIG_FILE" 2>/dev/null)
+  actual_fp=$(jq -r --argjson p "$port" '.inbounds[]? | select(.port == $p) | .streamSettings.realitySettings.fingerprint // "firefox"' "$CONFIG_FILE" 2>/dev/null)
   [[ -z "$actual_sni" ]] && actual_sni="$sni"
   [[ -z "$actual_fp" ]] && actual_fp="$fingerprint"
   public_key=$(_inbound_public_key_for_port "$port" 2>/dev/null || cat "$PUBLIC_KEY_FILE" 2>/dev/null)
@@ -2720,7 +2721,7 @@ _selfsteal_ensure_443_inbound() {
           serverNames:[$domain],
           privateKey:$private_key,
           shortIds:[$short_id],
-          fingerprint:"chrome"
+          fingerprint:"firefox"
         }
       },
       sniffing:{enabled:true,destOverride:["http","tls","quic"],routeOnly:true},
@@ -5169,12 +5170,12 @@ create_profile_menu() {
   read -r route_choice
   case $route_choice in
     1) create_profile_all_routes "$profile_name" ;;
-    2) create_profile "$profile_name" "tcp" "" "chrome" ;;
-    3) create_profile "$profile_name" "xhttp" "" "chrome" ;;
-    4) create_profile "$profile_name" "tcp-mux" "" "chrome" ;;
-    5) create_profile "$profile_name" "grpc" "" "chrome" ;;
+    2) create_profile "$profile_name" "tcp" "" "firefox" ;;
+    3) create_profile "$profile_name" "xhttp" "" "firefox" ;;
+    4) create_profile "$profile_name" "tcp-mux" "" "firefox" ;;
+    5) create_profile "$profile_name" "grpc" "" "firefox" ;;
     6) create_profile "$profile_name" "tcp-utls" "" "firefox" ;;
-    7) create_profile "$profile_name" "tcp-xudp" "" "chrome" ;;
+    7) create_profile "$profile_name" "tcp-xudp" "" "firefox" ;;
     xorpub)
       # Hidden advanced opt-in (research §«Code Examples» #8 / D1 second-opinion).
       # xorpub mode = security theater в контексте Reality (codex+kimi подтвердили 2026-05-09).
@@ -5184,7 +5185,7 @@ create_profile_menu() {
       echo -e "${YELLOW}  Plan 6.2 не реализует отдельный xorpub-параметр vlessenc — профиль будет создан${NC}"
       echo -e "${YELLOW}  с дефолтным native ключом. xorpub-генерация — backlog (defer to v2.1).${NC}"
       sleep 3
-      create_profile "$profile_name" "xhttp" "" "chrome"
+      create_profile "$profile_name" "xhttp" "" "firefox"
       ;;
     0) return ;;
     *) echo -e "${RED}Неверный выбор${NC}"; sleep 2; return ;;
@@ -5246,23 +5247,23 @@ create_profile_all_routes() {
 
   defaults=$(build_transport_defaults "xhttp") || { rm -f "$routes_tmp"; return 1; }
   IFS='|' read -r port _ xhttp_path <<< "$defaults"
-  _append_route_json "xhttp-legacy" "xhttp" "$port" "$default_sni" "chrome" false "" "$xhttp_path" || { rm -f "$routes_tmp"; return 1; }
+  _append_route_json "xhttp-legacy" "xhttp" "$port" "$default_sni" "firefox" false "" "$xhttp_path" || { rm -f "$routes_tmp"; return 1; }
 
   defaults=$(build_transport_defaults "xhttp") || { rm -f "$routes_tmp"; return 1; }
   IFS='|' read -r port _ xhttp_path <<< "$defaults"
-  _append_route_json "xhttp-pq" "xhttp" "$port" "$default_sni" "chrome" true "" "$xhttp_path" || { rm -f "$routes_tmp"; return 1; }
+  _append_route_json "xhttp-pq" "xhttp" "$port" "$default_sni" "firefox" true "" "$xhttp_path" || { rm -f "$routes_tmp"; return 1; }
 
   defaults=$(build_transport_defaults "tcp-mux") || { rm -f "$routes_tmp"; return 1; }
   IFS='|' read -r port _ _ <<< "$defaults"
-  _append_route_json "tcp-mux" "tcp-mux" "$port" "$default_sni" "chrome" false "" "" || { rm -f "$routes_tmp"; return 1; }
+  _append_route_json "tcp-mux" "tcp-mux" "$port" "$default_sni" "firefox" false "" "" || { rm -f "$routes_tmp"; return 1; }
 
   defaults=$(build_transport_defaults "grpc") || { rm -f "$routes_tmp"; return 1; }
   IFS='|' read -r port grpc_service_name _ <<< "$defaults"
-  _append_route_json "grpc" "grpc" "$port" "$grpc_sni" "chrome" false "$grpc_service_name" "" || { rm -f "$routes_tmp"; return 1; }
+  _append_route_json "grpc" "grpc" "$port" "$grpc_sni" "firefox" false "$grpc_service_name" "" || { rm -f "$routes_tmp"; return 1; }
 
   defaults=$(build_transport_defaults "tcp") || { rm -f "$routes_tmp"; return 1; }
   IFS='|' read -r port _ _ <<< "$defaults"
-  _append_route_json "tcp-vision" "tcp" "$port" "$default_sni" "chrome" false "" "" || { rm -f "$routes_tmp"; return 1; }
+  _append_route_json "tcp-vision" "tcp" "$port" "$default_sni" "firefox" false "" "" || { rm -f "$routes_tmp"; return 1; }
 
   defaults=$(build_transport_defaults "tcp-utls") || { rm -f "$routes_tmp"; return 1; }
   IFS='|' read -r port _ _ <<< "$defaults"
@@ -5270,7 +5271,7 @@ create_profile_all_routes() {
 
   defaults=$(build_transport_defaults "tcp-xudp") || { rm -f "$routes_tmp"; return 1; }
   IFS='|' read -r port _ _ <<< "$defaults"
-  _append_route_json "tcp-xudp" "tcp-xudp" "$port" "$xudp_sni" "chrome" false "" "" || { rm -f "$routes_tmp"; return 1; }
+  _append_route_json "tcp-xudp" "tcp-xudp" "$port" "$xudp_sni" "firefox" false "" "" || { rm -f "$routes_tmp"; return 1; }
 
   local routes_json
   routes_json=$(jq -s '.' "$routes_tmp") || {
@@ -5558,7 +5559,7 @@ add_inbound() {
   local transport=$2
   local port=$3
   local sni=$4
-  local fingerprint=${5:-"chrome"}
+  local fingerprint=${5:-"firefox"}
   local grpc_service_name=$6
   local xhttp_path=$7
   local pq_enabled=${8:-}
@@ -6127,7 +6128,7 @@ generate_connection() {
   local uuid=$(jq -r '.uuid' "$profile_file")
   local transport=$(jq -r '.transport' "$profile_file")
   local port=$(jq -r '.port' "$profile_file")
-  local fingerprint=$(jq -r '.fingerprint // "chrome"' "$profile_file")
+  local fingerprint=$(jq -r '.fingerprint // "firefox"' "$profile_file")
   local current_sni=$(jq -r '.sni // "www.ozon.ru"' "$profile_file")
   local clean_public_key
   clean_public_key=$(_inbound_public_key_for_port "$port" 2>/dev/null || cat "$PUBLIC_KEY_FILE")
@@ -6551,7 +6552,7 @@ change_fingerprint_menu() {
   echo -e "${YELLOW}Выберите профиль для смены fingerprint:${NC}\n"
   local i=1
   for profile in "${profiles[@]}"; do
-    local fp=$(jq -r '.fingerprint // "chrome"' "$PROFILES_DIR/$profile.json" 2>/dev/null)
+    local fp=$(jq -r '.fingerprint // "firefox"' "$PROFILES_DIR/$profile.json" 2>/dev/null)
     local port=$(jq -r '.port' "$PROFILES_DIR/$profile.json" 2>/dev/null)
     echo -e "${CYAN} $i)${NC} $profile ${BLUE}[порт:$port]${NC} ${YELLOW}[fp:$fp]${NC}"
     ((i++))
@@ -6583,11 +6584,11 @@ change_fingerprint_menu() {
     select_route_for_profile "$profile_file" "смены fingerprint" || return
     route_index="$SELECTED_ROUTE_INDEX"
     route_label=$(jq -r --argjson i "$route_index" '.routes[$i].label // .routes[$i].transport // ("route-" + ($i|tostring))' "$profile_file")
-    current_fp=$(jq -r --argjson i "$route_index" '.routes[$i].fingerprint // .fingerprint // "chrome"' "$profile_file")
+    current_fp=$(jq -r --argjson i "$route_index" '.routes[$i].fingerprint // .fingerprint // "firefox"' "$profile_file")
     port=$(jq -r --argjson i "$route_index" '.routes[$i].port // empty' "$profile_file")
     target_label="$selected/$route_label"
   else
-    current_fp=$(jq -r '.fingerprint // "chrome"' "$profile_file")
+    current_fp=$(jq -r '.fingerprint // "firefox"' "$profile_file")
     port=$(jq -r '.port' "$profile_file")
   fi
 
@@ -6853,7 +6854,7 @@ change_port_menu() {
     # Port is in use - check transport compatibility
     target_inbound_transport=$(jq -r --argjson port "$new_port" '.inbounds[] | select(.port == $port) | .streamSettings.network' "$CONFIG_FILE")
     target_inbound_sni=$(jq -r --argjson port "$new_port" '.inbounds[] | select(.port == $port) | .streamSettings.realitySettings.serverNames[0]' "$CONFIG_FILE")
-    target_inbound_fp=$(jq -r --argjson port "$new_port" '.inbounds[] | select(.port == $port) | .streamSettings.realitySettings.fingerprint // "chrome"' "$CONFIG_FILE")
+    target_inbound_fp=$(jq -r --argjson port "$new_port" '.inbounds[] | select(.port == $port) | .streamSettings.realitySettings.fingerprint // "firefox"' "$CONFIG_FILE")
     target_inbound_metadata=$(read_inbound_transport_metadata "$new_port" "$profile_transport")
     IFS='|' read -r target_inbound_grpc_service_name target_inbound_xhttp_path <<< "$target_inbound_metadata"
 
@@ -6957,7 +6958,7 @@ change_port_menu() {
     fi
 
     # Шаг 4: Обновить файл профиля/маршрута (port + sni + fingerprint целевого inbound)
-    [[ -z "$target_inbound_fp" ]] && target_inbound_fp="chrome"
+    [[ -z "$target_inbound_fp" ]] && target_inbound_fp="firefox"
     if [[ -n "$route_index" ]]; then
       safe_jq_write --argjson i "$route_index" --argjson port "$new_port" --arg sni "$target_inbound_sni" --arg fp "$target_inbound_fp" '
         .routes[$i].port = $port |
@@ -7481,7 +7482,7 @@ upgrade_profile_to_pq_menu() {
   local port=$(jq -r '.port' "$pfile")
   local uuid=$(jq -r '.uuid' "$pfile")
   local sni=$(jq -r '.sni // "www.ozon.ru"' "$pfile")
-  local fingerprint=$(jq -r '.fingerprint // "chrome"' "$pfile")
+  local fingerprint=$(jq -r '.fingerprint // "firefox"' "$pfile")
   local old_transport=$(jq -r '.transport // "tcp"' "$pfile")
 
   # H1 fix: short_id ЧИТАЕМ ИЗ СУЩЕСТВУЮЩЕГО INBOUND (config.json), НЕ из profile JSON.

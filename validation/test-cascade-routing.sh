@@ -38,7 +38,7 @@ cat > "$UPSTREAM_FILE" <<'JSON'
   "uuid": "11111111-1111-4111-8111-111111111111",
   "transport": "tcp",
   "sni": "front.example.com",
-  "fingerprint": "chrome",
+  "fingerprint": "firefox",
   "public_key": "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN",
   "short_id": "abcd1234",
   "flow": "xtls-rprx-vision"
@@ -133,6 +133,8 @@ jq -e '.outbounds[] | select(.tag == "cascade-fragment" and .protocol == "freedo
   || fail "cascade fragment outbound missing"
 jq -e '.outbounds[] | select(.tag == "cascade-upstream").streamSettings.sockopt | select(.dialerProxy == "cascade-fragment" and .tcpFastOpen == true and .tcpNoDelay == true)' "$WORKDIR/enabled.json" >/dev/null \
   || fail "cascade outbound does not use cascade-fragment dialerProxy"
+jq -e '.outbounds[] | select(.tag == "cascade-upstream").streamSettings.realitySettings | select(.fingerprint == "firefox")' "$WORKDIR/enabled.json" >/dev/null \
+  || fail "cascade outbound must use Firefox fingerprint"
 ! jq -e '.outbounds[] | select(.tag == "cascade-upstream").settings.vnext[0].users[0].packetEncoding' "$WORKDIR/enabled.json" >/dev/null \
   || fail "plain tcp upstream unexpectedly has packetEncoding"
 jq -e '.outbounds[] | select(.tag == "direct" and .settings.fragment.packets == "tlshello")' "$WORKDIR/enabled.json" >/dev/null \
